@@ -34,6 +34,7 @@ final class StatisticsWindowController: NSWindowController, NSWindowDelegate {
     private var vpsUrlField: NSTextField!
     private var apiKeyField: NSTextField!
     private var syncStatusLabel: NSTextField!
+    private var summaryPromptTextView: NSTextView!
     
     convenience init() {
         let win = NSWindow(
@@ -203,24 +204,38 @@ final class StatisticsWindowController: NSWindowController, NSWindowDelegate {
     private func buildSyncSettingsView() {
         syncSettingsView = NSView()
         syncSettingsView.translatesAutoresizingMaskIntoConstraints = false
-        
+
         enableSyncCheckbox = NSButton(checkboxWithTitle: "Enable VPS Sync", target: self, action: #selector(syncSettingsChanged))
-        
+
         let urlLabel = createLabel(text: "VPS Endpoint URL:")
         vpsUrlField = NSTextField()
         vpsUrlField.placeholderString = "https://your-vps.com/api/sync"
         vpsUrlField.delegate = self
-        
+
         let apiKeyLabel = createLabel(text: "Authorization Bearer Token:")
         apiKeyField = NSSecureTextField()
         apiKeyField.placeholderString = "Optional API Key"
         apiKeyField.delegate = self
-        
+
         syncStatusLabel = createLabel(text: "Unsynced Records: 0")
         syncStatusLabel.textColor = .secondaryLabelColor
-        
+
         let manualSyncBtn = NSButton(title: "Force Sync Now", target: self, action: #selector(forceSyncClicked))
-        
+
+        let promptLabel = createLabel(text: "Summary Prompt:", isBold: true)
+
+        summaryPromptTextView = NSTextView()
+        summaryPromptTextView.isEditable = true
+        summaryPromptTextView.font = .systemFont(ofSize: 12)
+        summaryPromptTextView.string = Preferences.summaryPrompt
+        summaryPromptTextView.delegate = self
+
+        let promptScroll = NSScrollView()
+        promptScroll.documentView = summaryPromptTextView
+        promptScroll.hasVerticalScroller = true
+        promptScroll.translatesAutoresizingMaskIntoConstraints = false
+        promptScroll.heightAnchor.constraint(equalToConstant: 120).isActive = true
+
         let grid = NSGridView(views: [
             [enableSyncCheckbox, NSView()],
             [urlLabel, vpsUrlField],
@@ -233,14 +248,24 @@ final class StatisticsWindowController: NSWindowController, NSWindowDelegate {
         grid.column(at: 1).xPlacement = .fill
         grid.column(at: 1).width = 250
         grid.rowSpacing = 16
-        
-        syncSettingsView.addSubview(grid)
-        
+
+        let stack = NSStackView(views: [grid, promptLabel, promptScroll])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 16
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        syncSettingsView.addSubview(stack)
+
         NSLayoutConstraint.activate([
-            grid.topAnchor.constraint(equalTo: syncSettingsView.topAnchor, constant: 40),
-            grid.centerXAnchor.constraint(equalTo: syncSettingsView.centerXAnchor)
+            stack.topAnchor.constraint(equalTo: syncSettingsView.topAnchor, constant: 40),
+            stack.centerXAnchor.constraint(equalTo: syncSettingsView.centerXAnchor),
+            stack.widthAnchor.constraint(equalToConstant: 450),
+
+            promptScroll.leadingAnchor.constraint(equalTo: stack.leadingAnchor),
+            promptScroll.trailingAnchor.constraint(equalTo: stack.trailingAnchor)
         ])
-        
+
         // Load prefs
         enableSyncCheckbox.state = Preferences.syncEnabled ? .on : .off
         vpsUrlField.stringValue = Preferences.syncVPSURL
@@ -536,5 +561,14 @@ extension StatisticsWindowController: NSTableViewDataSource, NSTableViewDelegate
         }
         
         return cell
+    }
+}
+
+extension StatisticsWindowController: NSTextViewDelegate {
+    func textDidChange(_ notification: Notification) {
+        guard let textView = notification.object as? NSTextView else { return }
+        if textView == summaryPromptTextView {
+            Preferences.summaryPrompt = textView.string
+        }
     }
 }
