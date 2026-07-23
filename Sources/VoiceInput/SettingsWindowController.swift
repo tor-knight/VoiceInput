@@ -2,6 +2,7 @@ import AppKit
 
 final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
+    private var enableCheckbox: NSButton!
     private var providerPopUp: NSPopUpButton!
     private var baseURLField: NSTextField!
     private var apiKeyField:  NSTextField!   // plain text so key can be selected & deleted fully
@@ -37,6 +38,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             return f
         }
 
+                let enableLabel = label("Enable LLM:")
+        enableCheckbox = NSButton(checkboxWithTitle: "Use LLM to correct speech-to-text errors", target: nil, action: nil)
+        enableCheckbox.state = Preferences.llmEnabled ? .on : .off
+
         let providerLabel = label("Provider:")
         let urlLabel   = label("API Base URL:")
         let keyLabel   = label("API Key:")
@@ -66,6 +71,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
         // Grid layout
         let grid = NSGridView(views: [
+            [enableLabel, enableCheckbox],
             [providerLabel, providerPopUp],
             [urlLabel,   baseURLField],
             [keyLabel,   apiKeyField],
@@ -154,6 +160,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func flushToPreferences() {
+        Preferences.llmEnabled = (enableCheckbox.state == .on)
         if let title = providerPopUp.selectedItem?.title,
            let provider = Preferences.LLMProvider(rawValue: title) {
             Preferences.llmProvider = provider
