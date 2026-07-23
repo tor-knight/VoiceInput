@@ -1,6 +1,43 @@
 import Foundation
 
 enum Preferences {
+    // MARK: - Keychain Helper
+    
+    private enum Keychain {
+        static let service = "com.voiceinput.app.apikey"
+        
+        static func save(key: String, value: String) {
+            let data = value.data(using: .utf8)!
+            let query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: service,
+                kSecAttrAccount as String: key,
+                kSecValueData as String: data
+            ]
+            
+            SecItemDelete(query as CFDictionary)
+            if !value.isEmpty {
+                SecItemAdd(query as CFDictionary, nil)
+            }
+        }
+        
+        static func load(key: String) -> String? {
+            let query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: service,
+                kSecAttrAccount as String: key,
+                kSecReturnData as String: true,
+                kSecMatchLimit as String: kSecMatchLimitOne
+            ]
+            
+            var item: CFTypeRef?
+            if SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+               let data = item as? Data {
+                return String(data: data, encoding: .utf8)
+            }
+            return nil
+        }
+    }
     private static let defaults = UserDefaults.standard
 
     // MARK: - Language
@@ -86,8 +123,8 @@ enum Preferences {
     }
 
     static var llmAPIKey: String {
-        get { defaults.string(forKey: "llmAPIKey") ?? "" }
-        set { defaults.set(newValue, forKey: "llmAPIKey") }
+        get { Keychain.load(key: "llmAPIKey") ?? "" }
+        set { Keychain.save(key: "llmAPIKey", value: newValue) }
     }
 
     static var llmModel: String {

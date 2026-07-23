@@ -52,7 +52,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         baseURLField.placeholderString = "https://api.openai.com/v1"
         baseURLField.stringValue = Preferences.llmBaseURL
 
-        apiKeyField = NSTextField(string: "")
+        apiKeyField = NSSecureTextField(string: "")
         apiKeyField.stringValue = Preferences.llmAPIKey
         // Use a cell that shows text (not masked) so user can visually select-all & delete
         apiKeyField.cell?.isScrollable = true

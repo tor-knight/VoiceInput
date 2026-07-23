@@ -33,6 +33,7 @@ final class VoiceRecorder {
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults   = true
+        request.addsPunctuation = true
         request.requiresOnDeviceRecognition  = false
         recognitionRequest = request
 
