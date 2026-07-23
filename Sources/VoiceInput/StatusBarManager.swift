@@ -4,6 +4,7 @@ import AppKit
 final class StatusBarManager {
     private var statusItem: NSStatusItem!
     private var settingsController: SettingsWindowController?
+    private var statsController: StatisticsWindowController?
 
     // Menu items that need dynamic state
     private var languageMenuItems: [NSMenuItem] = []
@@ -63,6 +64,12 @@ final class StatusBarManager {
         llmParent.submenu = llmMenu
         menu.addItem(llmParent)
 
+        let statsItem = NSMenuItem(title: "Statistics & History…",
+                                      action: #selector(openStats),
+                                      keyEquivalent: "")
+        statsItem.target = self
+        menu.addItem(statsItem)
+
         menu.addItem(.separator())
 
         // ── Quit ─────────────────────────────────────────────────────────────
@@ -97,6 +104,16 @@ final class StatusBarManager {
         }
         settingsController?.showWindow(nil)
         settingsController?.window?.makeKeyAndOrderFront(nil)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func openStats() {
+        if statsController == nil {
+            statsController = StatisticsWindowController()
+        }
+        statsController?.loadData()
+        statsController?.showWindow(nil)
+        statsController?.window?.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
     }
 }

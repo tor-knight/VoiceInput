@@ -131,4 +131,21 @@ enum Preferences {
         get { defaults.string(forKey: "llmModel") ?? "gpt-4o-mini" }
         set { defaults.set(newValue, forKey: "llmModel") }
     }
+
+    // MARK: - Sync (VPS)
+
+    static var syncEnabled: Bool {
+        get { defaults.bool(forKey: "syncEnabled") }
+        set { defaults.set(newValue, forKey: "syncEnabled") }
+    }
+
+    static var syncVPSURL: String {
+        get { defaults.string(forKey: "syncVPSURL") ?? "" }
+        set { defaults.set(newValue, forKey: "syncVPSURL") }
+    }
+
+    static var syncAPIKey: String {
+        get { Keychain.load(key: "syncAPIKey") ?? "" }
+        set { Keychain.save(key: "syncAPIKey", value: newValue) }
+    }
 }

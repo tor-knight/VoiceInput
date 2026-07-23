@@ -94,7 +94,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func stopRecording() {
-        voiceRecorder.stopRecording { [weak self] finalText in
+        voiceRecorder.stopRecording { [weak self] finalText, duration in
             guard let self else { return }
             DispatchQueue.main.async {
                 guard !finalText.isEmpty else {
@@ -104,20 +104,47 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                                 let requiresKey = (Preferences.llmProvider != .ollama && Preferences.llmProvider != .custom)
                 let hasKey = !Preferences.llmAPIKey.isEmpty
                 let canCallLLM = Preferences.llmEnabled && (!requiresKey || hasKey)
-                
+
+                let charCount = finalText.count
+                let estimatedTokens = Int(Double(charCount) * 1.5)
+
                 logDebug("stopRecording - text: '\(finalText)' | llmEnabled: \(Preferences.llmEnabled) | provider: \(Preferences.llmProvider.rawValue) | canCallLLM: \(canCallLLM)")
-                
+
                 if canCallLLM {
                     self.floatingWindowController.showRefining()
                     self.llmRefiner.refine(text: finalText) { refined in
                         DispatchQueue.main.async {
                             self.floatingWindowController.hide()
                             self.textInjector.inject(text: refined)
+
+                            DatabaseManager.shared.insertLog(
+                                id: UUID().uuidString,
+                                createdAt: Date(),
+                                durationMs: duration * 1000,
+                                charCount: charCount,
+                                estimatedTokens: estimatedTokens,
+                                originalText: finalText,
+                                refinedText: refined,
+                                modelUsed: Preferences.llmModel
+                            )
+                            SyncService.shared.syncIfNeeded()
                         }
                     }
                 } else {
                     self.floatingWindowController.hide()
                     self.textInjector.inject(text: finalText)
+
+                    DatabaseManager.shared.insertLog(
+                        id: UUID().uuidString,
+                        createdAt: Date(),
+                        durationMs: duration * 1000,
+                        charCount: charCount,
+                        estimatedTokens: estimatedTokens,
+                        originalText: finalText,
+                        refinedText: finalText,
+                        modelUsed: "None"
+                    )
+                    SyncService.shared.syncIfNeeded()
                 }
             }
         }

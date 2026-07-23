@@ -16,9 +16,10 @@ final class VoiceRecorder {
     private var speechRecognizer:   SFSpeechRecognizer?
 
     private var currentText   = ""
-    private var stopCallback: ((String) -> Void)?
+    private var stopCallback: ((String, TimeInterval) -> Void)?
     private var isStopping    = false
     private var fallbackTimer: DispatchWorkItem?
+    private var recordingStartTime: Date?
 
     // MARK: - Start
 
@@ -26,6 +27,7 @@ final class VoiceRecorder {
         stopPrevious()
         currentText = ""
         isStopping  = false
+        recordingStartTime = Date()
 
         let recognizer = SFSpeechRecognizer(locale: locale)
         recognizer?.defaultTaskHint = .dictation
@@ -81,7 +83,7 @@ final class VoiceRecorder {
 
     // MARK: - Stop
 
-    func stopRecording(completion: @escaping (String) -> Void) {
+    func stopRecording(completion: @escaping (String, TimeInterval) -> Void) {
         guard !isStopping else { return }
         isStopping   = true
         stopCallback = completion
@@ -113,7 +115,9 @@ final class VoiceRecorder {
         stopCallback = nil
         isStopping   = false
 
-        cb?(text)
+        let duration = Date().timeIntervalSince(recordingStartTime ?? Date())
+
+        cb?(text, duration)
     }
 
     private func stopPrevious() {
