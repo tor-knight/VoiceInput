@@ -364,15 +364,10 @@ final class StatisticsWindowController: NSWindowController, NSWindowDelegate {
 
         let combinedText = todayLogs.map { $0.refinedText }.joined(separator: "\n")
         let prompt = """
-        Here is a transcript of everything I dictated today. Please provide a concise summary, categorising the main topics I talked about or worked on.
+        \(Preferences.summaryPrompt)
 
-        Transcript:
         \(combinedText)
         """
-
-        let refiner = LLMRefiner() // We can reuse LLMRefiner's network call logic but bypass its system prompt by using a custom one, or we can just make a direct call.
-        // Actually, LLMRefiner is strictly for speech correction currently and enforces a specific system prompt if not in test mode.
-        // Let's do a quick direct URLSession call here to avoid complicating LLMRefiner.
 
         let provider = Preferences.llmProvider
         let baseURL = Preferences.llmBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)

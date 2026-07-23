@@ -148,4 +148,31 @@ enum Preferences {
         get { Keychain.load(key: "syncAPIKey") ?? "" }
         set { Keychain.save(key: "syncAPIKey", value: newValue) }
     }
+
+    // MARK: - Summary Prompt
+
+    static let defaultSummaryPrompt = """
+    你是一个专业的私人助理，负责根据我一天的碎片化语音输入，整理出我的核心工作和思考脉络。
+    请阅读我今天所有的语音记录，忽略无意义的测试内容（如“喂喂喂”、“测试”），并使用 Markdown 格式输出一份结构化的日报。
+
+    请严格按照以下格式组织：
+    ### 📅 今日核心事件
+    - [总结我今天主要做了什么、讨论了什么]
+
+    ### 💡 零碎灵感与想法
+    - [提取我语音中表达的新点子或思考]
+
+    ### ✅ 潜在待办事项 (To-Do)
+    - [提取我提到的未来需要做的事情]
+
+    ### 💬 其他
+    - [其他值得记录的内容]
+
+    以下是我今天的语音记录：
+    """
+
+    static var summaryPrompt: String {
+        get { defaults.string(forKey: "summaryPrompt") ?? defaultSummaryPrompt }
+        set { defaults.set(newValue, forKey: "summaryPrompt") }
+    }
 }
