@@ -40,7 +40,7 @@ final class FloatingWindowController {
         panel.level                = .floating
         panel.backgroundColor      = .clear
         panel.isOpaque             = false
-        panel.hasShadow            = false // Turn off default window shadow to prevent sharp corner artifacts
+        panel.hasShadow            = true // Use system shadow, but properly shape the effect view
         panel.collectionBehavior   = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isMovable            = false
         panel.isMovableByWindowBackground = false
@@ -52,14 +52,11 @@ final class FloatingWindowController {
         effectView.state          = .active
         effectView.wantsLayer     = true
         effectView.layer?.cornerRadius  = cornerR
-        // MUST be false to allow shadow to bleed out of the bounds
-        effectView.layer?.masksToBounds = false
+        effectView.layer?.masksToBounds = true // MUST be true for NSVisualEffectView to clip corners properly
         
-        // Add smooth shadow to the effect view itself
-        effectView.layer?.shadowColor   = NSColor.black.cgColor
-        effectView.layer?.shadowOpacity = 0.2
-        effectView.layer?.shadowRadius  = 12
-        effectView.layer?.shadowOffset  = CGSize(width: 0, height: -4)
+        // Add a subtle semi-transparent border to ensure visibility on both pure white and pure black backgrounds
+        effectView.layer?.borderWidth = 1.0
+        effectView.layer?.borderColor = NSColor(white: 0.5, alpha: 0.3).cgColor
         panel.contentView = effectView
 
         // --- Waveform bars ---
