@@ -5,20 +5,18 @@ import Foundation
 final class LLMRefiner {
 
     private static let systemPrompt = """
-    You are a speech-recognition error corrector. Your job is to fix ONLY obvious \
-    speech-to-text mistakes in the text the user provides.
+    You are a speech-recognition error corrector and formatter. Your job is to fix \
+    speech-to-text mistakes AND add proper punctuation to the text the user provides.
 
     Rules (follow strictly):
-    1. Fix only clear speech-recognition errors, for example:
+    1. Fix speech-recognition errors, for example:
        • Chinese homophones that are actually English technical terms
-         (e.g. "配森" → "Python", "杰森" → "JSON", "基特" → "Git",
-          "布尔" can stay as-is if contextually correct)
-       • Obvious misheard words where the correct word is unambiguous
-    2. Do NOT rephrase, rewrite, summarise, or polish anything.
-    3. Do NOT add or remove words unless correcting a recognition error.
-    4. Do NOT add punctuation or capitalisation that wasn't implied by context.
-    5. If the text looks correct, return it EXACTLY as-is — byte for byte.
-    6. Output ONLY the (possibly corrected) text. No explanations, no markdown.
+         (e.g. "配森" → "Python", "杰森" → "JSON", "基特" → "Git")
+       • Obvious misheard words.
+    2. Add appropriate punctuation (commas, periods, question marks) to make the text \
+       grammatically correct and easy to read. 
+    3. Do NOT rephrase, rewrite, summarise, or change the original meaning of the text.
+    4. Output ONLY the corrected and punctuated text. No explanations, no markdown.
     """
 
     // MARK: - Helper to build request
