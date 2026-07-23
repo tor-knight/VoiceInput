@@ -40,24 +40,40 @@ final class FloatingWindowController {
         panel.level                = .floating
         panel.backgroundColor      = .clear
         panel.isOpaque             = false
-        panel.hasShadow            = true // Use system shadow, but properly shape the effect view
+        panel.hasShadow            = true
+        // VERY IMPORTANT: Tell macOS to calculate the shadow based on the window's contents, not its rectangular bounds
+        panel.styleMask.insert(.fullSizeContentView)
+        panel.titlebarAppearsTransparent = true
+        panel.titleVisibility = .hidden
         panel.collectionBehavior   = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isMovable            = false
         panel.isMovableByWindowBackground = false
 
+        // --- Container View (Fully Transparent) ---
+        let containerView = NSView()
+        containerView.wantsLayer = true
+        containerView.layer?.backgroundColor = NSColor.clear.cgColor
+        panel.contentView = containerView
+
         // --- Visual effect backdrop (the capsule) ---
         effectView = NSVisualEffectView()
+        effectView.translatesAutoresizingMaskIntoConstraints = false
         effectView.material       = .hudWindow
         effectView.blendingMode   = .behindWindow
         effectView.state          = .active
         effectView.wantsLayer     = true
         effectView.layer?.cornerRadius  = cornerR
-        effectView.layer?.masksToBounds = true // MUST be true for NSVisualEffectView to clip corners properly
-        
-        // Add a subtle semi-transparent border to ensure visibility on both pure white and pure black backgrounds
+        effectView.layer?.masksToBounds = true 
         effectView.layer?.borderWidth = 1.0
         effectView.layer?.borderColor = NSColor(white: 0.5, alpha: 0.3).cgColor
-        panel.contentView = effectView
+        containerView.addSubview(effectView)
+
+        NSLayoutConstraint.activate([
+            effectView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
+            effectView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
+            effectView.topAnchor.constraint(equalTo: containerView.topAnchor),
+            effectView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor)
+        ])
 
         // --- Waveform bars ---
         waveformView = WaveformView()
