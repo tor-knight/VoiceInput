@@ -1,0 +1,31 @@
+name: Release macOS App
+
+on:
+  push:
+    tags:
+      - 'v*' # Trigger this workflow when a tag starting with "v" (e.g. v1.2.0) is pushed
+
+jobs:
+  build-and-release:
+    name: Build & Upload Release
+    runs-on: macos-14 # We need a macOS runner for Swift and AppKit
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Select Xcode Version
+        run: sudo xcode-select -s /Applications/Xcode_15.2.app/Contents/Developer
+
+      - name: Build and Package
+        run: |
+          make build
+          zip -r VoiceInput.app.zip VoiceInput.app
+
+      - name: Create GitHub Release and Upload Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: VoiceInput.app.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
