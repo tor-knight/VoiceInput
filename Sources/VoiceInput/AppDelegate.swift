@@ -101,7 +101,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     self.floatingWindowController.hide()
                     return
                 }
-                if Preferences.llmEnabled && !Preferences.llmAPIKey.isEmpty {
+                                let requiresKey = (Preferences.llmProvider != .ollama && Preferences.llmProvider != .custom)
+                let hasKey = !Preferences.llmAPIKey.isEmpty
+                let canCallLLM = Preferences.llmEnabled && (!requiresKey || hasKey)
+                
+                logDebug("stopRecording - text: '\(finalText)' | llmEnabled: \(Preferences.llmEnabled) | provider: \(Preferences.llmProvider.rawValue) | canCallLLM: \(canCallLLM)")
+                
+                if canCallLLM {
                     self.floatingWindowController.showRefining()
                     self.llmRefiner.refine(text: finalText) { refined in
                         DispatchQueue.main.async {

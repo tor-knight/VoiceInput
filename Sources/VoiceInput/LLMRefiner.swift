@@ -31,7 +31,7 @@ final class LLMRefiner {
 
         let apiKeyRequired = (provider != .ollama && provider != .custom)
         if apiKeyRequired && apiKey.isEmpty {
-            return nil
+            logDebug("LLMRefiner - missing API key for provider \(provider.rawValue)"); return nil
         }
 
         let timeout: TimeInterval = forTest ? 15 : 30
@@ -102,7 +102,13 @@ final class LLMRefiner {
             return
         }
 
+                logDebug("LLMRefiner - Sending refine request to \(request.url?.absoluteString ?? "unknown"). Body size: \(request.httpBody?.count ?? 0) bytes.")
         URLSession.shared.dataTask(with: request) { data, response, error in
+            let httpStatus = (response as? HTTPURLResponse)?.statusCode ?? 0
+            logDebug("LLMRefiner - Received response. Status: \(httpStatus) | Error: \(error?.localizedDescription ?? "none") | Data bytes: \(data?.count ?? 0)")
+            if let data = data, let str = String(data: data, encoding: .utf8) {
+                logDebug("LLMRefiner - Response body:\n\(str)")
+            }
             guard let data else {
                 if let error { print("[VoiceInput] LLM network error: \(error.localizedDescription)") }
                 completion(text)

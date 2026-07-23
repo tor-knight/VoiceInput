@@ -15,8 +15,7 @@ build:
 	cp $(BUILD_DIR)/$(APP_NAME) $(BUNDLE)/Contents/MacOS/
 	cp Resources/Info.plist $(BUNDLE)/Contents/
 	cp Resources/*.icns $(BUNDLE)/Contents/Resources/ || true
-	@echo "Signing..."
-	codesign --force --deep --sign - $(BUNDLE)
+
 	@echo "Done: $(BUNDLE)"
 
 run: build
