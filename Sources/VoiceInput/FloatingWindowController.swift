@@ -20,7 +20,10 @@ final class FloatingWindowController {
     private let effectView:       NSVisualEffectView
     private let waveformView:     WaveformView
     private let textLabel:        NSTextField
+    private let timeLabel:        NSTextField
     private var isVisible         = false
+    private var recordTimer:      Timer?
+    private var recordStartTime:  Date?
     private var labelWidthConstraint: NSLayoutConstraint!
 
     // MARK: - Init
@@ -57,12 +60,19 @@ final class FloatingWindowController {
         waveformView.translatesAutoresizingMaskIntoConstraints = false
         effectView.addSubview(waveformView)
 
+        // --- Timer label ---
+        timeLabel = NSTextField(labelWithString: "00:00")
+        timeLabel.translatesAutoresizingMaskIntoConstraints = false
+        timeLabel.textColor             = NSColor(white: 1.0, alpha: 0.7)
+        timeLabel.font                  = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+        effectView.addSubview(timeLabel)
+
         // --- Text label ---
         textLabel = NSTextField(labelWithString: "")
         textLabel.translatesAutoresizingMaskIntoConstraints = false
         textLabel.textColor             = NSColor.white
         textLabel.font                  = NSFont.systemFont(ofSize: 15, weight: .medium)
-        textLabel.lineBreakMode         = .byTruncatingTail
+        textLabel.lineBreakMode         = .byTruncatingHead // Shows newest text on the right
         textLabel.maximumNumberOfLines  = 1
         textLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         effectView.addSubview(textLabel)
@@ -79,6 +89,10 @@ final class FloatingWindowController {
             textLabel.leadingAnchor.constraint(equalTo: waveformView.trailingAnchor, constant: gapWLabel),
             textLabel.centerYAnchor.constraint(equalTo: effectView.centerYAnchor),
             labelWidthConstraint,
+
+            timeLabel.leadingAnchor.constraint(equalTo: textLabel.trailingAnchor, constant: gapWLabel),
+            timeLabel.centerYAnchor.constraint(equalTo: effectView.centerYAnchor),
+            timeLabel.trailingAnchor.constraint(equalTo: effectView.trailingAnchor, constant: -padH)
         ])
 
         // Layer-backed for CASpringAnimation on show/hide
@@ -90,6 +104,12 @@ final class FloatingWindowController {
     func show() {
         guard !isVisible else { return }
         isVisible = true
+        
+        recordStartTime = Date()
+        timeLabel.stringValue = "00:00"
+        recordTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            self?.updateTimer()
+        }
 
         waveformView.startAnimating()
         updatePanelFrame(labelWidth: labelMinW, animated: false)
@@ -123,6 +143,8 @@ final class FloatingWindowController {
         guard isVisible else { return }
         isVisible = false
         waveformView.stopAnimating()
+        recordTimer?.invalidate()
+        recordTimer = nil
 
         // Scale-out + fade-out
         let scaleOut = CABasicAnimation(keyPath: "transform")
@@ -185,8 +207,17 @@ final class FloatingWindowController {
         }
     }
 
+    private func updateTimer() {
+        guard let start = recordStartTime else { return }
+        let diff = Int(Date().timeIntervalSince(start))
+        let m = diff / 60
+        let s = diff % 60
+        timeLabel.stringValue = String(format: "%02d:%02d", m, s)
+    }
+
     private func updatePanelFrame(labelWidth: CGFloat, animated: Bool) {
-        let totalW = padH + waveW + gapWLabel + labelWidth + padH
+        let timerW: CGFloat = 44
+        let totalW = padH + waveW + gapWLabel + labelWidth + gapWLabel + timerW + padH
         guard let screen = NSScreen.main else { return }
         let sf = screen.visibleFrame
         let x  = sf.midX - totalW / 2
