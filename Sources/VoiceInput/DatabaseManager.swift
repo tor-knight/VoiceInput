@@ -173,15 +173,15 @@ extension DatabaseManager {
     
     func getAllLogs(limit: Int = 100, offset: Int = 0) -> [SpeechLog] {
         guard let db = db else { return [] }
-        
+
         let queryStatementString = "SELECT id, created_at, duration_ms, char_count, estimated_tokens, original_text, refined_text, model_used, is_synced FROM speech_logs ORDER BY created_at DESC LIMIT ? OFFSET ?;"
         var queryStatement: OpaquePointer? = nil
         var logs: [SpeechLog] = []
-        
+
         if sqlite3_prepare_v2(db, queryStatementString, -1, &queryStatement, nil) == SQLITE_OK {
             sqlite3_bind_int(queryStatement, 1, Int32(limit))
             sqlite3_bind_int(queryStatement, 2, Int32(offset))
-            
+
             while sqlite3_step(queryStatement) == SQLITE_ROW {
                 let id = String(cString: sqlite3_column_text(queryStatement, 0))
                 let createdAt = Date(timeIntervalSince1970: sqlite3_column_double(queryStatement, 1))
@@ -192,13 +192,47 @@ extension DatabaseManager {
                 let refinedText = String(cString: sqlite3_column_text(queryStatement, 6))
                 let modelUsed = String(cString: sqlite3_column_text(queryStatement, 7))
                 let isSynced = sqlite3_column_int(queryStatement, 8) != 0
-                
+
                 let log = SpeechLog(id: id, createdAt: createdAt, durationMs: durationMs, charCount: charCount, estimatedTokens: estimatedTokens, originalText: originalText, refinedText: refinedText, modelUsed: modelUsed, isSynced: isSynced)
                 logs.append(log)
             }
         }
         sqlite3_finalize(queryStatement)
-        
+
+        return logs
+    }
+
+    func getLogsForToday() -> [SpeechLog] {
+        guard let db = db else { return [] }
+
+        let calendar = Calendar.current
+        let startOfToday = calendar.startOfDay(for: Date())
+        let startOfTodayTimestamp = startOfToday.timeIntervalSince1970
+
+        let queryStatementString = "SELECT id, created_at, duration_ms, char_count, estimated_tokens, original_text, refined_text, model_used, is_synced FROM speech_logs WHERE created_at >= ? ORDER BY created_at ASC;"
+        var queryStatement: OpaquePointer? = nil
+        var logs: [SpeechLog] = []
+
+        if sqlite3_prepare_v2(db, queryStatementString, -1, &queryStatement, nil) == SQLITE_OK {
+            sqlite3_bind_double(queryStatement, 1, startOfTodayTimestamp)
+
+            while sqlite3_step(queryStatement) == SQLITE_ROW {
+                let id = String(cString: sqlite3_column_text(queryStatement, 0))
+                let createdAt = Date(timeIntervalSince1970: sqlite3_column_double(queryStatement, 1))
+                let durationMs = sqlite3_column_double(queryStatement, 2)
+                let charCount = Int(sqlite3_column_int(queryStatement, 3))
+                let estimatedTokens = Int(sqlite3_column_int(queryStatement, 4))
+                let originalText = String(cString: sqlite3_column_text(queryStatement, 5))
+                let refinedText = String(cString: sqlite3_column_text(queryStatement, 6))
+                let modelUsed = String(cString: sqlite3_column_text(queryStatement, 7))
+                let isSynced = sqlite3_column_int(queryStatement, 8) != 0
+
+                let log = SpeechLog(id: id, createdAt: createdAt, durationMs: durationMs, charCount: charCount, estimatedTokens: estimatedTokens, originalText: originalText, refinedText: refinedText, modelUsed: modelUsed, isSynced: isSynced)
+                logs.append(log)
+            }
+        }
+        sqlite3_finalize(queryStatement)
+
         return logs
     }
     
