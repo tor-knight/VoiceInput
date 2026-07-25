@@ -18,7 +18,14 @@ You can download the pre-compiled, ready-to-use application from the [Releases](
 1. Download `VoiceInput.app.zip` and extract it.
 2. Drag `VoiceInput.app` into your `/Applications` folder.
 3. Open it from Launchpad or Spotlight.
-4. *Note: Since this is an unsigned application, you may need to go to System Settings -> Privacy & Security and click "Open Anyway" on the first launch.*
+
+> **⚠️ Note: "App is damaged and can't be opened"**
+> Since this application is built via GitHub Actions and is not officially notarized by Apple, macOS Gatekeeper may block it and claim the app is "damaged". 
+> To fix this, simply open your **Terminal** and run the following command to remove the quarantine attribute:
+> ```bash
+> xattr -cr /Applications/VoiceInput.app
+> ```
+> After running this command, you can double-click the app to open it normally. You only need to do this once.
 
 ## Configuration ⚙️
 
