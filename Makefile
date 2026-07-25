@@ -16,6 +16,9 @@ build:
 	cp Resources/Info.plist $(BUNDLE)/Contents/
 	cp Resources/*.icns $(BUNDLE)/Contents/Resources/ || true
 
+	@echo "Signing app bundle..."
+	codesign --force --deep --sign - $(BUNDLE)
+
 	@echo "Done: $(BUNDLE)"
 
 run: build
