@@ -55,10 +55,50 @@ Rules (follow strictly):
 
 ## Building from Source 🛠️
 
-If you prefer to build it yourself:
+If you prefer to build it yourself (macOS):
 
 ```bash
 git clone https://github.com/tor-knight/VoiceInput.git
 cd VoiceInput
 make install
 ```
+
+## iPhone Version (iOS App & Keyboard Extension) 📱
+
+VoiceInput includes an iOS app and custom keyboard extension sharing the same code core library target (`VoiceInputCore`).
+
+### Features:
+- **Main App**: Contains recording screen, complete history view with pagination, daily summary reports, and preferences settings.
+- **Keyboard Extension**: Allows you to dictate and paste LLM-refined text in *any* iOS app (e.g. Messages, Notes, Safari) by selecting the custom VoiceInput keyboard.
+- **Shared Database & Settings**: The App and Keyboard Extension share preferences and SQLite database entries using iOS App Groups container.
+
+### Setup and Installation:
+1. Open `VoiceInputMobile/VoiceInputMobile.xcodeproj` in Xcode.
+2. Select the `VoiceInputMobile` target, and under **Signing & Capabilities**, select your Apple Developer Team. (A free personal developer account works for installing onto your own device).
+3. Ensure the App Group identifier `group.com.voiceinput.shared` is registered and ticked (if you use a different Bundle ID, update the App Group identifier in the app and extension entitlements and matching code sites).
+4. Connect your iPhone and run the project (`Cmd + R`) to install.
+5. **Enable Custom Keyboard**:
+   - On your iPhone, go to **Settings** -> **General** -> **Keyboard** -> **Keyboards** -> **Add New Keyboard...**
+   - Under Third-Party Keyboards, select **VoiceInput**.
+   - Tap **KeyboardExtension - VoiceInput** in the list, and turn on **Allow Full Access**. *(This is required to make network calls to your configured LLM API provider).*
+
+---
+
+## Unit & Integration Tests 🧪
+
+To verify the backend logic (DatabaseManager, Preferences, SyncService, LLMRefiner) without needing `XCTest.framework` (which is unavailable in standard Command Line Tools on macOS without full Xcode installations), compile and execute our custom test runner:
+
+```bash
+# Create scratch folder
+mkdir -p .scratch
+
+# Compile shared VoiceInputCore library
+swiftc -module-cache-path .scratch/module-cache -emit-module -emit-library -module-name VoiceInputCore Sources/VoiceInputCore/*.swift -o .scratch/libVoiceInputCore.dylib
+
+# Compile Test Runner
+swiftc -module-cache-path .scratch/module-cache -I .scratch/ -L .scratch/ -lVoiceInputCore Tests/VoiceInputTests/TestRunner.swift -o .scratch/TestRunner
+
+# Run tests
+.scratch/TestRunner
+```
+

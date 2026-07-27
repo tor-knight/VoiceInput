@@ -3,20 +3,28 @@ import Foundation
 
 /// Monitors the global Fn key via a CGEvent tap.
 /// Suppresses Fn events so they never reach the system emoji picker.
-final class FnKeyMonitor {
-    var onFnDown: (() -> Void)?
-    var onFnUp:   (() -> Void)?
+public final class FnKeyMonitor {
+    public var onFnDown: (() -> Void)?
+    public var onFnUp:   (() -> Void)?
+
+    /// Delay threshold (in seconds) required for press-and-hold to trigger voice input.
+    /// Default is 0.5s (500ms). Quick taps (< 0.5s) are ignored so input method switching works.
+    public var holdDelay: TimeInterval = 0.5
 
     // internal so the C callback shim (same file) can reach eventTap for re-enable
     var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var isFnDown = false
+    private var isRecordingStarted = false
+    private var holdWorkItem: DispatchWorkItem?
 
     // We keep a pointer to self alive for the C callback lifetime.
     // Since FnKeyMonitor lives for the entire app session this is fine.
     private var retainedSelf: Unmanaged<FnKeyMonitor>?
 
-    func start() {
+    public init() {}
+
+    public func start() {
         let mask: CGEventMask = (1 << CGEventType.flagsChanged.rawValue)
 
         retainedSelf = Unmanaged.passRetained(self)
@@ -42,7 +50,7 @@ final class FnKeyMonitor {
         CGEvent.tapEnable(tap: tap, enable: true)
     }
 
-    func stop() {
+    public func stop() {
         if let tap = eventTap { CGEvent.tapEnable(tap: tap, enable: false) }
         if let src = runLoopSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), src, .commonModes) }
         eventTap = nil
@@ -52,7 +60,8 @@ final class FnKeyMonitor {
     }
 
     // Called from the C callback shim below.
-    func handleFlagsChanged(event: CGEvent) -> Unmanaged<CGEvent>? {
+    @discardableResult
+    public func handleFlagsChanged(event: CGEvent) -> Unmanaged<CGEvent>? {
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
         guard keyCode == 63 else {
             // Not the Fn key; pass through unchanged.
@@ -63,14 +72,46 @@ final class FnKeyMonitor {
 
         if fnPressed && !isFnDown {
             isFnDown = true
-            onFnDown?()
+            isRecordingStarted = false
+
+            let workItem = DispatchWorkItem { [weak self] in
+                guard let self = self, self.isFnDown else { return }
+                self.isRecordingStarted = true
+                self.onFnDown?()
+            }
+            self.holdWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + holdDelay, execute: workItem)
+
+            // Return nil to swallow event during key down
+            return nil
         } else if !fnPressed && isFnDown {
             isFnDown = false
-            onFnUp?()
+            holdWorkItem?.cancel()
+            holdWorkItem = nil
+
+            if isRecordingStarted {
+                isRecordingStarted = false
+                onFnUp?()
+                return nil
+            } else {
+                // Was a short tap (less than holdDelay).
+                // Re-post synthetic Fn key press & release to system so native features (like switching input method) still work.
+                DispatchQueue.main.async {
+                    let src = CGEventSource(stateID: .hidSystemState)
+                    if let evDown = CGEvent(keyboardEventSource: src, virtualKey: 63, keyDown: true) {
+                        evDown.flags = .maskSecondaryFn
+                        evDown.post(tap: .cghidEventTap)
+                    }
+                    if let evUp = CGEvent(keyboardEventSource: src, virtualKey: 63, keyDown: false) {
+                        evUp.flags = []
+                        evUp.post(tap: .cghidEventTap)
+                    }
+                }
+                return nil
+            }
         }
 
-        // Return nil to swallow the event and prevent the emoji picker.
-        return nil
+        return Unmanaged.passUnretained(event)
     }
 }
 

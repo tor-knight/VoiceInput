@@ -1,4 +1,5 @@
 import AppKit
+import VoiceInputCore
 
 /// Owns the NSStatusItem and its menu.
 final class StatusBarManager {

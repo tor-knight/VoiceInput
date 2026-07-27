@@ -1,7 +1,14 @@
 import Foundation
 
-func logDebug(_ msg: String) {
+public func logDebug(_ msg: String) {
+    #if os(iOS)
+    let fileManager = FileManager.default
+    let cacheURL = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first!
+    let path = cacheURL.appendingPathComponent("VoiceInput.log").path
+    #else
     let path = "/tmp/VoiceInput.log"
+    #endif
+
     let formatter = DateFormatter()
     formatter.dateFormat = "HH:mm:ss.SSS"
     let dateStr = formatter.string(from: Date())

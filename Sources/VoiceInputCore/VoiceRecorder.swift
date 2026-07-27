@@ -3,12 +3,9 @@ import Speech
 import Foundation
 import Accelerate
 
-/// Manages audio capture and streaming speech recognition.
-/// Provides real-time RMS levels and incremental transcription.
-final class VoiceRecorder {
-    /// Called on background thread; dispatch to main before touching UI.
-    var onTranscription: ((String) -> Void)?
-    var onRMSUpdate:     ((Float) -> Void)?
+public final class VoiceRecorder {
+    public var onTranscription: ((String) -> Void)?
+    public var onRMSUpdate:     ((Float) -> Void)?
 
     private var audioEngine:        AVAudioEngine?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
@@ -21,9 +18,11 @@ final class VoiceRecorder {
     private var fallbackTimer: DispatchWorkItem?
     private var recordingStartTime: Date?
 
+    public init() {}
+
     // MARK: - Start
 
-    func startRecording(locale: Locale) {
+    public func startRecording(locale: Locale) {
         stopPrevious()
         currentText = ""
         isStopping  = false
@@ -39,6 +38,17 @@ final class VoiceRecorder {
         request.requiresOnDeviceRecognition  = false
         recognitionRequest = request
 
+        #if os(iOS)
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
+            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+        } catch {
+            print("[VoiceRecorder] Failed to set up AVAudioSession: \(error)")
+            return
+        }
+        #endif
+
         let engine = AVAudioEngine()
         audioEngine = engine
         let inputNode = engine.inputNode
@@ -53,7 +63,7 @@ final class VoiceRecorder {
             engine.prepare()
             try engine.start()
         } catch {
-            print("[VoiceInput] AVAudioEngine start failed: \(error)")
+            print("[VoiceRecorder] AVAudioEngine start failed: \(error)")
             return
         }
 
@@ -71,10 +81,9 @@ final class VoiceRecorder {
             }
 
             if let error {
-                // AVAudioSession errors 203/216 are normal session interruptions; others warrant logging.
                 let nsError = error as NSError
                 if nsError.code != 203 && nsError.code != 216 {
-                    print("[VoiceInput] Recognition error: \(error.localizedDescription)")
+                    print("[VoiceRecorder] Recognition error: \(error.localizedDescription)")
                 }
                 self.deliverFinalText(self.currentText)
             }
@@ -83,7 +92,7 @@ final class VoiceRecorder {
 
     // MARK: - Stop
 
-    func stopRecording(completion: @escaping (String, TimeInterval) -> Void) {
+    public func stopRecording(completion: @escaping (String, TimeInterval) -> Void) {
         guard !isStopping else { return }
         isStopping   = true
         stopCallback = completion
@@ -116,6 +125,11 @@ final class VoiceRecorder {
         isStopping   = false
 
         let duration = Date().timeIntervalSince(recordingStartTime ?? Date())
+
+        #if os(iOS)
+        // Deactivate audio session on stop to let other apps play audio again
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        #endif
 
         cb?(text, duration)
     }

@@ -1,4 +1,5 @@
 import AppKit
+import VoiceInputCore
 
 /// Elegant translucent capsule HUD shown while recording / refining.
 final class FloatingWindowController {
@@ -61,9 +62,10 @@ final class FloatingWindowController {
         effectView.material       = .hudWindow
         effectView.blendingMode   = .behindWindow
         effectView.state          = .active
+        effectView.appearance     = NSAppearance(named: .vibrantDark)
         effectView.wantsLayer     = true
         effectView.layer?.cornerRadius  = cornerR
-        effectView.layer?.masksToBounds = true 
+        effectView.layer?.masksToBounds = true
         effectView.layer?.borderWidth = 1.0
         effectView.layer?.borderColor = NSColor(white: 0.5, alpha: 0.3).cgColor
         containerView.addSubview(effectView)
@@ -75,6 +77,12 @@ final class FloatingWindowController {
             effectView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor)
         ])
 
+        // --- Text Shadow for extra contrast ---
+        let textShadow = NSShadow()
+        textShadow.shadowColor = NSColor.black.withAlphaComponent(0.8)
+        textShadow.shadowOffset = NSSize(width: 0, height: -1)
+        textShadow.shadowBlurRadius = 3
+
         // --- Waveform bars ---
         waveformView = WaveformView()
         waveformView.translatesAutoresizingMaskIntoConstraints = false
@@ -83,7 +91,8 @@ final class FloatingWindowController {
         // --- Timer label ---
         timeLabel = NSTextField(labelWithString: "00:00")
         timeLabel.translatesAutoresizingMaskIntoConstraints = false
-        timeLabel.textColor             = NSColor(white: 1.0, alpha: 0.7)
+        timeLabel.textColor             = NSColor(white: 1.0, alpha: 0.85)
+        timeLabel.shadow                = textShadow
         timeLabel.font                  = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)
         effectView.addSubview(timeLabel)
 
@@ -91,6 +100,7 @@ final class FloatingWindowController {
         textLabel = NSTextField(labelWithString: "")
         textLabel.translatesAutoresizingMaskIntoConstraints = false
         textLabel.textColor             = NSColor.white
+        textLabel.shadow                = textShadow
         textLabel.font                  = NSFont.systemFont(ofSize: 15, weight: .medium)
         textLabel.lineBreakMode         = .byTruncatingHead // Shows newest text on the right
         textLabel.maximumNumberOfLines  = 1

@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import VoiceInputCore
 
 /// Injects text into the currently focused input by using the system clipboard
 /// and simulating ⌘V, with CJK input source detection and temporary switching.

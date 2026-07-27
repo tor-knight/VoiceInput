@@ -1,10 +1,7 @@
 import Foundation
 
-/// Calls an OpenAI-compatible chat completion API to conservatively fix
-/// obvious speech-recognition errors (homophones, mis-recognised tech terms).
-final class LLMRefiner {
-
-    private static let systemPrompt = """
+public final class LLMRefiner {
+    public static let systemPrompt = """
     You are a speech-recognition error corrector and formatter. Your job is to fix \
     speech-to-text mistakes AND add proper punctuation to the text the user provides.
 
@@ -14,14 +11,16 @@ final class LLMRefiner {
          (e.g. "配森" → "Python", "杰森" → "JSON", "基特" → "Git")
        • Obvious misheard words.
     2. Add appropriate punctuation (commas, periods, question marks) to make the text \
-       grammatically correct and easy to read. 
+       grammatically correct and easy to read.
     3. Do NOT rephrase, rewrite, summarise, or change the original meaning of the text.
     4. Output ONLY the corrected and punctuated text. No explanations, no markdown.
     """
 
+    public init() {}
+
     // MARK: - Helper to build request
 
-    private func buildRequest(forTest: Bool, text: String) -> URLRequest? {
+    private func buildRequest(systemPrompt: String?, userPrompt: String, maxTokens: Int) -> URLRequest? {
         let provider = Preferences.llmProvider
         let baseURL = Preferences.llmBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let apiKey  = Preferences.llmAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -29,13 +28,13 @@ final class LLMRefiner {
 
         let apiKeyRequired = (provider != .ollama && provider != .custom)
         if apiKeyRequired && apiKey.isEmpty {
-            logDebug("LLMRefiner - missing API key for provider \(provider.rawValue)"); return nil
+            logDebug("LLMRefiner - missing API key for provider \(provider.rawValue)")
+            return nil
         }
 
-        let timeout: TimeInterval = forTest ? 15 : 30
+        let timeout: TimeInterval = 30
 
         if provider == .anthropic {
-            // Anthropic Claude
             guard let url = URL(string: baseURL + (baseURL.hasSuffix("/") ? "messages" : "/messages")) else {
                 return nil
             }
@@ -47,19 +46,18 @@ final class LLMRefiner {
 
             var body: [String: Any] = [
                 "model": model,
-                "max_tokens": forTest ? 10 : 1024,
+                "max_tokens": maxTokens,
                 "messages": [
-                    ["role": "user", "content": text]
+                    ["role": "user", "content": userPrompt]
                 ],
                 "temperature": 0.1
             ]
-            if !forTest {
-                body["system"] = Self.systemPrompt
+            if let system = systemPrompt {
+                body["system"] = system
             }
             request.httpBody = try? JSONSerialization.data(withJSONObject: body)
             return request
         } else {
-            // OpenAI-compatible
             guard let url = URL(string: baseURL + (baseURL.hasSuffix("/") ? "chat/completions" : "/chat/completions")) else {
                 return nil
             }
@@ -72,19 +70,16 @@ final class LLMRefiner {
 
             var body: [String: Any] = [
                 "model": model,
-                "max_tokens": forTest ? 10 : 1024,
+                "max_tokens": maxTokens,
                 "temperature": 0.1
             ]
-            if forTest {
-                body["messages"] = [
-                    ["role": "user", "content": text]
-                ]
-            } else {
-                body["messages"] = [
-                    ["role": "system", "content": Self.systemPrompt],
-                    ["role": "user",   "content": text]
-                ]
+            var messages: [[String: String]] = []
+            if let system = systemPrompt {
+                messages.append(["role": "system", "content": system])
             }
+            messages.append(["role": "user", "content": userPrompt])
+            body["messages"] = messages
+
             request.httpBody = try? JSONSerialization.data(withJSONObject: body)
             return request
         }
@@ -92,63 +87,69 @@ final class LLMRefiner {
 
     // MARK: - Refine
 
-    func refine(text: String, completion: @escaping (String) -> Void) {
-        guard !text.isEmpty else { completion(text); return }
-
-        guard let request = buildRequest(forTest: false, text: text) else {
+    public func refine(text: String, completion: @escaping (String) -> Void) {
+        guard !text.isEmpty else {
             completion(text)
             return
         }
 
-                logDebug("LLMRefiner - Sending refine request to \(request.url?.absoluteString ?? "unknown"). Body size: \(request.httpBody?.count ?? 0) bytes.")
+        generate(systemPrompt: Self.systemPrompt, userPrompt: text, maxTokens: 1024) { result in
+            completion(result ?? text)
+        }
+    }
+
+    // MARK: - Generic Generate
+
+    public func generate(systemPrompt: String?, userPrompt: String, maxTokens: Int, completion: @escaping (String?) -> Void) {
+        guard let request = buildRequest(systemPrompt: systemPrompt, userPrompt: userPrompt, maxTokens: maxTokens) else {
+            completion(nil)
+            return
+        }
+
+        logDebug("LLMRefiner - Sending LLM request to \(request.url?.absoluteString ?? "unknown").")
         URLSession.shared.dataTask(with: request) { data, response, error in
             let httpStatus = (response as? HTTPURLResponse)?.statusCode ?? 0
             logDebug("LLMRefiner - Received response. Status: \(httpStatus) | Error: \(error?.localizedDescription ?? "none") | Data bytes: \(data?.count ?? 0)")
-            if let data = data, let str = String(data: data, encoding: .utf8) {
-                logDebug("LLMRefiner - Response body:\n\(str)")
-            }
+
             guard let data else {
-                if let error { print("[VoiceInput] LLM network error: \(error.localizedDescription)") }
-                completion(text)
+                if let error {
+                    print("[VoiceInput] LLM network error: \(error.localizedDescription)")
+                }
+                completion(nil)
                 return
             }
 
             let provider = Preferences.llmProvider
-            var refinedText: String? = nil
+            var resultText: String? = nil
 
             if provider == .anthropic {
-                // Parse Anthropic response
                 if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let content = json["content"] as? [[String: Any]],
                    let firstBlock = content.first,
                    let textBlock = firstBlock["text"] as? String {
-                    refinedText = textBlock
+                    resultText = textBlock
                 }
             } else {
-                // Parse OpenAI-compatible response
                 if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let choices = json["choices"] as? [[String: Any]],
                    let message = choices.first?["message"] as? [String: Any],
                    let content = message["content"] as? String {
-                    refinedText = content
+                    resultText = content
                 }
             }
 
-            if let refinedText = refinedText {
-                completion(refinedText.trimmingCharacters(in: .whitespacesAndNewlines))
+            if let resultText = resultText {
+                completion(resultText.trimmingCharacters(in: .whitespacesAndNewlines))
             } else {
-                if let responseString = String(data: data, encoding: .utf8) {
-                    print("[VoiceInput] LLM parse error. Response was: \(responseString)")
-                }
-                completion(text)
+                completion(nil)
             }
         }.resume()
     }
 
     // MARK: - Test connection
 
-    func test(completion: @escaping (Bool, String) -> Void) {
-        guard let request = buildRequest(forTest: true, text: "Reply with the word ok") else {
+    public func test(completion: @escaping (Bool, String) -> Void) {
+        guard let request = buildRequest(systemPrompt: nil, userPrompt: "Reply with the word ok", maxTokens: 10) else {
             completion(false, "Invalid URL or empty API Key")
             return
         }

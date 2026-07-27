@@ -1,33 +1,55 @@
 import Foundation
 import SQLite3
 
-final class DatabaseManager {
-    static let shared = DatabaseManager()
-    
+public final class DatabaseManager {
+    public static let shared = DatabaseManager()
+
     private var db: OpaquePointer?
-    
+
     private init() {
         openDatabase()
         createTable()
     }
-    
+
     deinit {
         if let db = db {
             sqlite3_close(db)
         }
     }
-    
+
     private func openDatabase() {
         let fileManager = FileManager.default
+        var dbURL: URL
+
+        #if os(iOS)
+        if let containerURL = fileManager.containerURL(forSecurityApplicationGroupIdentifier: "group.com.voiceinput.shared") {
+            dbURL = containerURL.appendingPathComponent("speech_logs.sqlite")
+        } else {
+            let appSupportURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            let appDirectoryURL = appSupportURL.appendingPathComponent("VoiceInput", isDirectory: true)
+            if !fileManager.fileExists(atPath: appDirectoryURL.path) {
+                try? fileManager.createDirectory(at: appDirectoryURL, withIntermediateDirectories: true)
+            }
+            dbURL = appDirectoryURL.appendingPathComponent("speech_logs.sqlite")
+        }
+        #else
         let appSupportURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let appDirectoryURL = appSupportURL.appendingPathComponent("VoiceInput", isDirectory: true)
-        
+
         if !fileManager.fileExists(atPath: appDirectoryURL.path) {
             try? fileManager.createDirectory(at: appDirectoryURL, withIntermediateDirectories: true)
         }
-        
-        let dbURL = appDirectoryURL.appendingPathComponent("speech_logs.sqlite")
-        
+        dbURL = appDirectoryURL.appendingPathComponent("speech_logs.sqlite")
+        #endif
+
+        // Check if database directory is writable. If not (e.g. sandboxed test runner), fall back to temp dir.
+        let checkPath = dbURL.deletingLastPathComponent().path
+        if !fileManager.isWritableFile(atPath: checkPath) {
+            let tempPath = ProcessInfo.processInfo.environment["TMPDIR"] ?? "/tmp"
+            dbURL = URL(fileURLWithPath: tempPath).appendingPathComponent("speech_logs.sqlite")
+            print("[DatabaseManager] Custom database path not writable, falling back to: \(dbURL.path)")
+        }
+
         if sqlite3_open(dbURL.path, &db) != SQLITE_OK {
             print("[DatabaseManager] Error opening database at \(dbURL.path)")
             db = nil
@@ -35,10 +57,10 @@ final class DatabaseManager {
             print("[DatabaseManager] Successfully opened database at \(dbURL.path)")
         }
     }
-    
+
     private func createTable() {
         guard let db = db else { return }
-        
+
         let createTableString = """
         CREATE TABLE IF NOT EXISTS speech_logs (
             id TEXT PRIMARY KEY,
@@ -52,7 +74,7 @@ final class DatabaseManager {
             is_synced INTEGER DEFAULT 0
         );
         """
-        
+
         var createTableStatement: OpaquePointer? = nil
         if sqlite3_prepare_v2(db, createTableString, -1, &createTableStatement, nil) == SQLITE_OK {
             if sqlite3_step(createTableStatement) == SQLITE_DONE {
@@ -65,12 +87,12 @@ final class DatabaseManager {
         }
         sqlite3_finalize(createTableStatement)
     }
-    
-    func insertLog(id: String, createdAt: Date, durationMs: Double, charCount: Int, estimatedTokens: Int, originalText: String, refinedText: String, modelUsed: String) {
+
+    public func insertLog(id: String, createdAt: Date, durationMs: Double, charCount: Int, estimatedTokens: Int, originalText: String, refinedText: String, modelUsed: String) {
         guard let db = db else { return }
-        
+
         let insertStatementString = "INSERT INTO speech_logs (id, created_at, duration_ms, char_count, estimated_tokens, original_text, refined_text, model_used, is_synced) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);"
-        
+
         var insertStatement: OpaquePointer? = nil
         if sqlite3_prepare_v2(db, insertStatementString, -1, &insertStatement, nil) == SQLITE_OK {
             sqlite3_bind_text(insertStatement, 1, (id as NSString).utf8String, -1, nil)
@@ -82,49 +104,41 @@ final class DatabaseManager {
             sqlite3_bind_text(insertStatement, 7, (refinedText as NSString).utf8String, -1, nil)
             sqlite3_bind_text(insertStatement, 8, (modelUsed as NSString).utf8String, -1, nil)
             sqlite3_bind_int(insertStatement, 9, 0)
-            
+
             if sqlite3_step(insertStatement) == SQLITE_DONE {
                 print("[DatabaseManager] Successfully inserted row.")
             } else {
-                print("[DatabaseManager] Could not insert row.")
+                let errMsg = String(cString: sqlite3_errmsg(db))
+                print("[DatabaseManager] Could not insert row: \(errMsg)")
             }
         } else {
             print("[DatabaseManager] INSERT statement could not be prepared.")
         }
         sqlite3_finalize(insertStatement)
     }
-}
 
-struct SpeechLog {
-    let id: String
-    let createdAt: Date
-    let durationMs: Double
-    let charCount: Int
-    let estimatedTokens: Int
-    let originalText: String
-    let refinedText: String
-    let modelUsed: String
-    let isSynced: Bool
-}
+    public func deleteLog(id: String) {
+        guard let db = db else { return }
+        let deleteStatementString = "DELETE FROM speech_logs WHERE id = ?;"
+        var deleteStatement: OpaquePointer? = nil
+        if sqlite3_prepare_v2(db, deleteStatementString, -1, &deleteStatement, nil) == SQLITE_OK {
+            sqlite3_bind_text(deleteStatement, 1, (id as NSString).utf8String, -1, nil)
+            if sqlite3_step(deleteStatement) == SQLITE_DONE {
+                print("[DatabaseManager] Successfully deleted row.")
+            } else {
+                print("[DatabaseManager] Could not delete row.")
+            }
+        }
+        sqlite3_finalize(deleteStatement)
+    }
 
-struct SpeechStatistics {
-    let todayWords: Int
-    let todayDurationMs: Double
-    let todayTokens: Int
-    let totalWords: Int
-    let totalDurationMs: Double
-    let totalTokens: Int
-}
-
-extension DatabaseManager {
-    
-    func getUnsyncedLogs() -> [SpeechLog] {
+    public func getUnsyncedLogs() -> [SpeechLog] {
         guard let db = db else { return [] }
-        
+
         let queryStatementString = "SELECT id, created_at, duration_ms, char_count, estimated_tokens, original_text, refined_text, model_used, is_synced FROM speech_logs WHERE is_synced = 0;"
         var queryStatement: OpaquePointer? = nil
         var logs: [SpeechLog] = []
-        
+
         if sqlite3_prepare_v2(db, queryStatementString, -1, &queryStatement, nil) == SQLITE_OK {
             while sqlite3_step(queryStatement) == SQLITE_ROW {
                 let id = String(cString: sqlite3_column_text(queryStatement, 0))
@@ -136,7 +150,7 @@ extension DatabaseManager {
                 let refinedText = String(cString: sqlite3_column_text(queryStatement, 6))
                 let modelUsed = String(cString: sqlite3_column_text(queryStatement, 7))
                 let isSynced = sqlite3_column_int(queryStatement, 8) != 0
-                
+
                 let log = SpeechLog(id: id, createdAt: createdAt, durationMs: durationMs, charCount: charCount, estimatedTokens: estimatedTokens, originalText: originalText, refinedText: refinedText, modelUsed: modelUsed, isSynced: isSynced)
                 logs.append(log)
             }
@@ -144,22 +158,22 @@ extension DatabaseManager {
             print("[DatabaseManager] SELECT statement could not be prepared")
         }
         sqlite3_finalize(queryStatement)
-        
+
         return logs
     }
-    
-    func markAsSynced(ids: [String]) {
+
+    public func markAsSynced(ids: [String]) {
         guard let db = db, !ids.isEmpty else { return }
-        
+
         let placeholders = ids.map { _ in "?" }.joined(separator: ", ")
         let updateStatementString = "UPDATE speech_logs SET is_synced = 1 WHERE id IN (\(placeholders));"
-        
+
         var updateStatement: OpaquePointer? = nil
         if sqlite3_prepare_v2(db, updateStatementString, -1, &updateStatement, nil) == SQLITE_OK {
             for (index, id) in ids.enumerated() {
                 sqlite3_bind_text(updateStatement, Int32(index + 1), (id as NSString).utf8String, -1, nil)
             }
-            
+
             if sqlite3_step(updateStatement) == SQLITE_DONE {
                 print("[DatabaseManager] Successfully updated synced status.")
             } else {
@@ -170,8 +184,8 @@ extension DatabaseManager {
         }
         sqlite3_finalize(updateStatement)
     }
-    
-    func getAllLogs(limit: Int = 100, offset: Int = 0) -> [SpeechLog] {
+
+    public func getAllLogs(limit: Int = 100, offset: Int = 0) -> [SpeechLog] {
         guard let db = db else { return [] }
 
         let queryStatementString = "SELECT id, created_at, duration_ms, char_count, estimated_tokens, original_text, refined_text, model_used, is_synced FROM speech_logs ORDER BY created_at DESC LIMIT ? OFFSET ?;"
@@ -202,7 +216,7 @@ extension DatabaseManager {
         return logs
     }
 
-    func getLogsForToday() -> [SpeechLog] {
+    public func getLogsForToday() -> [SpeechLog] {
         guard let db = db else { return [] }
 
         let calendar = Calendar.current
@@ -235,8 +249,8 @@ extension DatabaseManager {
 
         return logs
     }
-    
-    func getStatistics() -> SpeechStatistics {
+
+    public func getStatistics() -> SpeechStatistics {
         guard let db = db else {
             return SpeechStatistics(todayWords: 0, todayDurationMs: 0, todayTokens: 0, totalWords: 0, totalDurationMs: 0, totalTokens: 0)
         }
@@ -279,8 +293,7 @@ extension DatabaseManager {
         return SpeechStatistics(todayWords: todayWords, todayDurationMs: todayDuration, todayTokens: todayTokens, totalWords: totalWords, totalDurationMs: totalDuration, totalTokens: totalTokens)
     }
 
-    #if DEBUG
-    func deleteAllLogsForTesting() {
+    public func deleteAllLogsForTesting() {
         guard let db = db else { return }
         let deleteStatementString = "DELETE FROM speech_logs;"
         var deleteStatement: OpaquePointer? = nil
@@ -289,5 +302,4 @@ extension DatabaseManager {
         }
         sqlite3_finalize(deleteStatement)
     }
-    #endif
 }

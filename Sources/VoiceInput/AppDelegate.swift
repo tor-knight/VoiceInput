@@ -1,6 +1,7 @@
 import AppKit
 import AVFoundation
 import Speech
+import VoiceInputCore
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusBarManager: StatusBarManager!

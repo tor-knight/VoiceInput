@@ -1,4 +1,5 @@
 import AppKit
+import VoiceInputCore
 
 final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 

@@ -1,35 +1,60 @@
 import Foundation
+import Security
 
-enum Preferences {
+public enum Preferences {
+    public static var useInMemoryKeychain = false
+    private static var inMemoryKeychain: [String: String] = [:]
+
     // MARK: - Keychain Helper
-    
-    private enum Keychain {
-        static let service = "com.voiceinput.app.apikey"
-        
-        static func save(key: String, value: String) {
+
+    public enum Keychain {
+        #if os(iOS)
+        public static let service = "com.voiceinput.app.apikey"
+        public static let accessGroup = "group.com.voiceinput.shared"
+        #else
+        public static let service = "com.voiceinput.app.apikey"
+        #endif
+
+        public static func save(key: String, value: String) {
+            if useInMemoryKeychain {
+                inMemoryKeychain[key] = value
+                return
+            }
+
             let data = value.data(using: .utf8)!
-            let query: [String: Any] = [
+            var query: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
                 kSecAttrService as String: service,
                 kSecAttrAccount as String: key,
                 kSecValueData as String: data
             ]
-            
+            #if os(iOS)
+            // Use access group for sharing between app and keyboard extension on iOS
+            query[kSecAttrAccessGroup as String] = accessGroup
+            #endif
+
             SecItemDelete(query as CFDictionary)
             if !value.isEmpty {
                 SecItemAdd(query as CFDictionary, nil)
             }
         }
-        
-        static func load(key: String) -> String? {
-            let query: [String: Any] = [
+
+        public static func load(key: String) -> String? {
+            if useInMemoryKeychain {
+                return inMemoryKeychain[key]
+            }
+
+            var query: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
                 kSecAttrService as String: service,
                 kSecAttrAccount as String: key,
                 kSecReturnData as String: true,
                 kSecMatchLimit as String: kSecMatchLimitOne
             ]
-            
+            #if os(iOS)
+            query[kSecAttrAccessGroup as String] = accessGroup
+            #endif
+
             var item: CFTypeRef?
             if SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
                let data = item as? Data {
@@ -38,18 +63,23 @@ enum Preferences {
             return nil
         }
     }
+
+    #if os(iOS)
+    private static let defaults = UserDefaults(suiteName: "group.com.voiceinput.shared") ?? UserDefaults.standard
+    #else
     private static let defaults = UserDefaults.standard
+    #endif
 
     // MARK: - Language
 
-    enum Language: String, CaseIterable {
+    public enum Language: String, CaseIterable {
         case english           = "en-US"
         case simplifiedChinese = "zh-CN"
         case traditionalChinese = "zh-TW"
         case japanese          = "ja-JP"
         case korean            = "ko-KR"
 
-        var displayName: String {
+        public var displayName: String {
             switch self {
             case .english:            return "English"
             case .simplifiedChinese:  return "简体中文"
@@ -57,10 +87,11 @@ enum Preferences {
             case .japanese:           return "日本語"
             case .korean:             return "한국어"
             }
+
         }
     }
 
-    static var selectedLanguage: Language {
+    public static var selectedLanguage: Language {
         get {
             let raw = defaults.string(forKey: "selectedLanguage") ?? Language.simplifiedChinese.rawValue
             return Language(rawValue: raw) ?? .simplifiedChinese
@@ -70,7 +101,7 @@ enum Preferences {
 
     // MARK: - LLM
 
-    enum LLMProvider: String, CaseIterable, Codable {
+    public enum LLMProvider: String, CaseIterable, Codable {
         case openai = "OpenAI"
         case gemini = "Google Gemini"
         case anthropic = "Anthropic Claude"
@@ -79,7 +110,7 @@ enum Preferences {
         case ollama = "Ollama (Local)"
         case custom = "Custom"
 
-        var defaultURL: String {
+        public var defaultURL: String {
             switch self {
             case .openai:      return "https://api.openai.com/v1"
             case .gemini:      return "https://generativelanguage.googleapis.com/v1beta/openai"
@@ -91,7 +122,7 @@ enum Preferences {
             }
         }
 
-        var defaultModel: String {
+        public var defaultModel: String {
             switch self {
             case .openai:      return "gpt-4o-mini"
             case .gemini:      return "gemini-2.5-flash"
@@ -104,7 +135,7 @@ enum Preferences {
         }
     }
 
-    static var llmProvider: LLMProvider {
+    public static var llmProvider: LLMProvider {
         get {
             let raw = defaults.string(forKey: "llmProvider") ?? LLMProvider.openai.rawValue
             return LLMProvider(rawValue: raw) ?? .openai
@@ -112,46 +143,46 @@ enum Preferences {
         set { defaults.set(newValue.rawValue, forKey: "llmProvider") }
     }
 
-    static var llmEnabled: Bool {
+    public static var llmEnabled: Bool {
         get { defaults.bool(forKey: "llmEnabled") }
         set { defaults.set(newValue, forKey: "llmEnabled") }
     }
 
-    static var llmBaseURL: String {
+    public static var llmBaseURL: String {
         get { defaults.string(forKey: "llmBaseURL") ?? "https://api.openai.com/v1" }
         set { defaults.set(newValue, forKey: "llmBaseURL") }
     }
 
-    static var llmAPIKey: String {
+    public static var llmAPIKey: String {
         get { Keychain.load(key: "llmAPIKey") ?? "" }
         set { Keychain.save(key: "llmAPIKey", value: newValue) }
     }
 
-    static var llmModel: String {
+    public static var llmModel: String {
         get { defaults.string(forKey: "llmModel") ?? "gpt-4o-mini" }
         set { defaults.set(newValue, forKey: "llmModel") }
     }
 
     // MARK: - Sync (VPS)
 
-    static var syncEnabled: Bool {
+    public static var syncEnabled: Bool {
         get { defaults.bool(forKey: "syncEnabled") }
         set { defaults.set(newValue, forKey: "syncEnabled") }
     }
 
-    static var syncVPSURL: String {
+    public static var syncVPSURL: String {
         get { defaults.string(forKey: "syncVPSURL") ?? "" }
         set { defaults.set(newValue, forKey: "syncVPSURL") }
     }
 
-    static var syncAPIKey: String {
+    public static var syncAPIKey: String {
         get { Keychain.load(key: "syncAPIKey") ?? "" }
         set { Keychain.save(key: "syncAPIKey", value: newValue) }
     }
 
     // MARK: - Summary Prompt
 
-    static let defaultSummaryPrompt = """
+    public static let defaultSummaryPrompt = """
     你是一个专业的私人助理，负责根据我一天的碎片化语音输入，整理出我的核心工作和思考脉络。
     请阅读我今天所有的语音记录，忽略无意义的测试内容（如“喂喂喂”、“测试”），并使用 Markdown 格式输出一份结构化的日报。
 
@@ -171,7 +202,7 @@ enum Preferences {
     以下是我今天的语音记录：
     """
 
-    static var summaryPrompt: String {
+    public static var summaryPrompt: String {
         get { defaults.string(forKey: "summaryPrompt") ?? defaultSummaryPrompt }
         set { defaults.set(newValue, forKey: "summaryPrompt") }
     }

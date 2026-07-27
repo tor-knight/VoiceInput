@@ -3,15 +3,29 @@ import PackageDescription
 
 let package = Package(
     name: "VoiceInput",
-    platforms: [.macOS(.v14)],
+    platforms: [
+        .macOS(.v14),
+        .iOS(.v17)
+    ],
+    products: [
+        .library(
+            name: "VoiceInputCore",
+            targets: ["VoiceInputCore"]
+        )
+    ],
     targets: [
+        .target(
+            name: "VoiceInputCore",
+            path: "Sources/VoiceInputCore"
+        ),
         .executableTarget(
             name: "VoiceInput",
+            dependencies: ["VoiceInputCore"],
             path: "Sources/VoiceInput"
         ),
-        .testTarget(
+        .executableTarget(
             name: "VoiceInputTests",
-            dependencies: ["VoiceInput"],
+            dependencies: ["VoiceInputCore"],
             path: "Tests/VoiceInputTests"
         )
     ]

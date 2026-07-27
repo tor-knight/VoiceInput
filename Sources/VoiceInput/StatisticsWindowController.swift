@@ -1,4 +1,5 @@
 import AppKit
+import VoiceInputCore
 
 final class StatisticsWindowController: NSWindowController, NSWindowDelegate {
     
@@ -394,94 +395,19 @@ final class StatisticsWindowController: NSWindowController, NSWindowDelegate {
         \(combinedText)
         """
 
-        let provider = Preferences.llmProvider
-        let baseURL = Preferences.llmBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        let apiKey = Preferences.llmAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        let model = Preferences.llmModel.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        var request: URLRequest?
-
-        if provider == .anthropic {
-            guard let url = URL(string: baseURL + (baseURL.hasSuffix("/") ? "messages" : "/messages")) else { return }
-            request = URLRequest(url: url)
-            request?.httpMethod = "POST"
-            request?.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request?.setValue(apiKey, forHTTPHeaderField: "x-api-key")
-            request?.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-
-            let body: [String: Any] = [
-                "model": model,
-                "max_tokens": 1024,
-                "messages": [ ["role": "user", "content": prompt] ]
-            ]
-            request?.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        } else {
-            guard let url = URL(string: baseURL + (baseURL.hasSuffix("/") ? "chat/completions" : "/chat/completions")) else { return }
-            request = URLRequest(url: url)
-            request?.httpMethod = "POST"
-            request?.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            if !apiKey.isEmpty {
-                request?.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-            }
-
-            let body: [String: Any] = [
-                "model": model,
-                "max_tokens": 1024,
-                "messages": [ ["role": "user", "content": prompt] ]
-            ]
-            request?.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        }
-
-        guard let finalRequest = request else {
-            DispatchQueue.main.async {
-                self.summaryProgressIndicator.stopAnimation(nil)
-                self.summaryButton.isEnabled = true
-                self.summaryTextView.string = "Failed to create API request."
-            }
-            return
-        }
-
-        URLSession.shared.dataTask(with: finalRequest) { [weak self] data, response, error in
+        LLMRefiner().generate(systemPrompt: nil, userPrompt: prompt, maxTokens: 1024) { [weak self] result in
             guard let self = self else { return }
             DispatchQueue.main.async {
                 self.summaryProgressIndicator.stopAnimation(nil)
                 self.summaryButton.isEnabled = true
 
-                if let error = error {
-                    self.summaryTextView.string = "Error: \(error.localizedDescription)"
-                    return
-                }
-
-                guard let data = data else {
-                    self.summaryTextView.string = "No data returned."
-                    return
-                }
-
-                var summaryResult: String?
-
-                if provider == .anthropic {
-                    if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                       let content = json["content"] as? [[String: Any]],
-                       let text = content.first?["text"] as? String {
-                        summaryResult = text
-                    }
-                } else {
-                    if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                       let choices = json["choices"] as? [[String: Any]],
-                       let message = choices.first?["message"] as? [String: Any],
-                       let content = message["content"] as? String {
-                        summaryResult = content
-                    }
-                }
-
-                if let result = summaryResult {
+                if let result = result {
                     self.summaryTextView.string = result
                 } else {
-                    let raw = String(data: data, encoding: .utf8) ?? "Unknown error"
-                    self.summaryTextView.string = "Failed to parse response: \(raw)"
+                    self.summaryTextView.string = "Failed to generate summary. Please check your settings and connection."
                 }
             }
-        }.resume()
+        }
     }
     @objc private func forceSyncClicked() {
         SyncService.shared.syncIfNeeded()
