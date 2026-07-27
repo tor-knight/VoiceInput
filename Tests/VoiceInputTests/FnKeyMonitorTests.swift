@@ -1,6 +1,6 @@
 import CoreGraphics
 import Foundation
-@testable import VoiceInputCore
+import VoiceInputCore
 
 class FnKeyMonitorTests {
     private func createFnEvent(keyDown: Bool) -> CGEvent {
